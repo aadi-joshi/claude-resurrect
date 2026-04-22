@@ -85,7 +85,7 @@ if [[ "$INSTALL_HOOKS" == true ]]; then
   # We use os.homedir() inside node rather than shell-interpolated paths,
   # because on Windows (Git Bash / WSL) the shell gives Unix paths like
   # /c/Users/... but Node.js needs Windows paths like C:\Users\...
-  node -e "
+  if node -e "
     const fs = require('fs');
     const os = require('os');
     const p = require('path');
@@ -109,8 +109,7 @@ if [[ "$INSTALL_HOOKS" == true ]]; then
 
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
     console.log('ok');
-  " 2>/dev/null | grep -q ok
-  if [[ $? -eq 0 ]]; then
+  " 2>/dev/null | grep -q ok; then
     success "Registered PreCompact hook in settings.json"
   else
     warn "Could not auto-register hook. Add it manually -- see docs/how-it-works.md"

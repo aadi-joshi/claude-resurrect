@@ -26,9 +26,13 @@ cr() {
         local sid
         sid=$(grep -m1 "^session_id:" "$manifest" 2>/dev/null | awk '{print $2}' | tr -d '[:space:]')
 
-        # Fallback: if skill couldn't capture session ID, look at the most recent JSONL
+        # Fallback: if skill couldn't capture session ID, find the most recent JSONL
         if [[ -z "$sid" || "$sid" == "unknown" ]]; then
-          sid=$(ls -t ~/.claude/projects/*/*.jsonl 2>/dev/null | head -1 | xargs basename 2>/dev/null | sed 's/\.jsonl$//')
+          local recent_jsonl=""
+          while IFS= read -r -d '' f; do
+            [[ -z "$recent_jsonl" || "$f" -nt "$recent_jsonl" ]] && recent_jsonl="$f"
+          done < <(find "${HOME}/.claude/projects" -maxdepth 2 -name "*.jsonl" -print0 2>/dev/null)
+          [[ -n "$recent_jsonl" ]] && sid=$(basename "$recent_jsonl" .jsonl)
         fi
 
         # Read and delete the manifest (single-use)

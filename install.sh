@@ -132,6 +132,25 @@ else
   success "claude() wrapper added to $RC_FILE"
 fi
 
+# ── Patch ~/.claude/CLAUDE.md ────────────────────────────────────────────────
+GLOBAL_CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+CLAUDE_MD_MARKER="# claude-resurrect: resurrection protocol"
+
+info "Patching $GLOBAL_CLAUDE_MD with resurrection protocol..."
+
+if grep -q "$CLAUDE_MD_MARKER" "$GLOBAL_CLAUDE_MD" 2>/dev/null; then
+  warn "Resurrection protocol already present in $GLOBAL_CLAUDE_MD -- skipping"
+else
+  {
+    echo ""
+    echo "$CLAUDE_MD_MARKER"
+    # Strip the comment header from examples/CLAUDE.md, keep the content
+    grep -v "^# CLAUDE.md" "$REPO_DIR/examples/CLAUDE.md" | grep -v "^# Copy this" | grep -v "^# This is"
+    echo ""
+  } >> "$GLOBAL_CLAUDE_MD"
+  success "Resurrection protocol added to $GLOBAL_CLAUDE_MD"
+fi
+
 # ── Done ─────────────────────────────────────────────────────────────────────
 echo ""
 echo "  Installation complete."
@@ -143,7 +162,8 @@ echo "  Then use claude as normal -- the wrapper is transparent:"
 echo "    claude                              # works as before, resurrection-enabled"
 echo "    claude --dangerously-skip-permissions"
 echo ""
-echo "  Inside a session, use:"
+echo "  Claude will now restart itself automatically when needed."
+echo "  Inside a session, you can also trigger manually:"
 echo "    /resurrect      -> write manifest + restart (preserves task context)"
 echo "    /resurrect-now  -> instant hard restart (no manifest)"
 echo ""

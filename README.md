@@ -69,11 +69,18 @@ The installer:
 - Copies `/resurrect` and `/resurrect-now` to `~/.claude/skills/`
 - Copies the pre-compact hook to `~/.claude/hooks/` and registers it in `~/.claude/settings.json`
 - Adds a `claude()` shell function to your rc that wraps the real binary transparently
+- Patches `~/.claude/CLAUDE.md` with the resurrection protocol so Claude knows when to trigger restarts automatically
 
 To skip the hook:
 
 ```bash
 bash install.sh --no-hooks
+```
+
+To update later:
+
+```bash
+bash update.sh
 ```
 
 ---
@@ -90,14 +97,14 @@ claude --model claude-opus-4-7
 
 The wrapper is a shell function that shadows the real binary. It calls `command claude` internally (which bypasses shell functions and hits the real binary directly), so there's no recursion and no conflict with your existing setup.
 
-Inside a session, Claude uses the skills directly:
+**Claude handles restarts automatically.** The installer patches `~/.claude/CLAUDE.md` with instructions telling Claude when to invoke `/resurrect` -- installing an MCP server, editing settings, modifying hooks, running `claude update`. Claude detects these situations and restarts itself without asking you. You just see the session resume.
+
+You can also trigger manually from inside a session:
 
 | Command | What it does |
 |---|---|
 | `/resurrect` | Write the manifest, then restart. Use for any real task. |
 | `/resurrect-now` | Instant hard restart, no manifest. Quick config reload. |
-
-For Claude to trigger these automatically (instead of just telling you to restart), add the resurrection protocol block to your `~/.claude/CLAUDE.md`. Copy it from `examples/CLAUDE.md`.
 
 ---
 
@@ -185,6 +192,7 @@ Troubleshooting: [docs/troubleshooting.md](./docs/troubleshooting.md)
 claude-resurrect/
 ├── install.sh                         one-liner install
 ├── uninstall.sh                       clean removal
+├── update.sh                          git pull + reinstall
 ├── wrapper/
 │   └── claude-resurrect.sh            the cr() shell function
 ├── skills/

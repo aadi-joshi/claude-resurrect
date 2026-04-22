@@ -109,8 +109,12 @@ if [[ "$INSTALL_HOOKS" == true ]]; then
 
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
     console.log('ok');
-  " 2>/dev/null | grep -q ok && success "Registered PreCompact hook in settings.json" \
-              || warn "Could not auto-register hook. Add it manually -- see docs/how-it-works.md"
+  " 2>/dev/null | grep -q ok
+  if [[ $? -eq 0 ]]; then
+    success "Registered PreCompact hook in settings.json"
+  else
+    warn "Could not auto-register hook. Add it manually -- see docs/how-it-works.md"
+  fi
 fi
 
 # ── Install wrapper function ─────────────────────────────────────────────────

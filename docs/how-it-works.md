@@ -28,7 +28,7 @@ User runs: claude --dangerously-skip-permissions
      |
      v
 claude() wrapper launches claude normally (first_run=1)
-On Windows/WSL2: also starts _claude_resurrect_watcher in background,
+On Windows shells: also starts _claude_resurrect_watcher in background,
 polling for .claude/resurrect.flag every 0.3s
      |
      v
@@ -43,7 +43,7 @@ Claude invokes /resurrect skill
      +-- Step 4: runs `touch .claude/resurrect.flag && kill -HUP $PPID`
           |
           +-- macOS/Linux: SIGHUP reaches Claude Code, exits with code 129
-          +-- Windows/WSL2: watcher sees the flag, runs PowerShell to
+          +-- Windows shells: watcher sees the flag, runs PowerShell to
                kill node.exe running Claude, Claude Code exits
           |
           v
@@ -69,9 +69,9 @@ On macOS/Linux, `$PPID` from within Claude's Bash tool points to the Claude Code
 
 Exit code `129` follows the POSIX standard -- any Unix programmer reading the wrapper immediately understands what it means.
 
-## Why the flag file on Windows
+## Why the flag file on Windows shells
 
-In WSL2, Claude Code runs as a Windows process. From inside the WSL bash environment, `$PPID` resolves to `1` (the WSL init process), not the Claude Code process. `kill -HUP 1` fails silently.
+In Windows shell environments (WSL2/Git Bash/MSYS), Claude Code runs as a Windows process and `kill -HUP $PPID` is often unreliable for reaching it directly. In WSL2, `$PPID` may resolve to `1` (the WSL init process), so `kill -HUP 1` fails silently.
 
 The workaround: the skill writes `.claude/resurrect.flag` before attempting the kill. A background bash process started by the wrapper polls for this file. When it appears, it invokes PowerShell to find the node.exe process whose command line contains "claude" and calls `Stop-Process -Force` on it. The wrapper then detects the flag on the next loop iteration and proceeds with the manifest-based restart.
 

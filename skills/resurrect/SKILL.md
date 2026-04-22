@@ -1,10 +1,6 @@
 ---
 name: resurrect
-description: >
-  Use when you need to restart Claude Code mid-task: MCP server install,
-  hook modification, settings update, or claude update. Writes a precise
-  handoff manifest so you resume with full context, then restarts.
-  For a quick reload with no task state to preserve, use /resurrect-now.
+description: Use when you need to restart Claude Code mid-task: MCP server install, hook modification, settings update, or claude update. Writes a precise handoff manifest so you resume with full context, then restarts. For a quick reload with no task state to preserve, use /resurrect-now.
 ---
 
 # Resurrection Protocol

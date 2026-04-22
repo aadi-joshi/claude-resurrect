@@ -1,0 +1,14 @@
+# Claude Code session artifacts -- never commit these
+.claude/resurrection.md
+.claude/compaction-backup.md
+.claude/projects/
+
+# WSL mount artifacts
+mnt/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+*.swp

@@ -1,0 +1,6 @@
+# Force LF for shell scripts and JS -- these run on Unix systems
+*.sh        text eol=lf
+*.mjs       text eol=lf
+*.md        text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf

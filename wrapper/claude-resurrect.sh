@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # claude-resurrect wrapper
-# Source this file in your .zshrc or .bashrc.
-# Usage: cr [any flags you'd normally pass to claude]
-# Example: cr --dangerously-skip-permissions
+# Source this in your .zshrc or .bashrc.
+#
+# This defines a shell function named `claude` that shadows the real binary.
+# Inside the function, `command claude` bypasses functions/aliases and calls
+# the actual claude binary directly -- no recursion.
 #
 # How it works:
-#   1. Launches claude normally on first run
-#   2. If claude exits with code 129 (SIGHUP), a resurrection was requested
+#   1. You run `claude` as normal -- nothing changes
+#   2. If claude exits with code 129 (SIGHUP), a resurrection was triggered
 #   3. Checks for .claude/resurrection.md written by the /resurrect skill
 #   4. Injects that manifest as the first prompt in the resumed session
 #   5. Claude wakes up knowing exactly where it left off
 
-cr() {
+claude() {
   local manifest=".claude/resurrection.md"
   local rc
   local first_run=1
@@ -51,20 +53,20 @@ cr() {
         printf '\n  claude-resurrect: manifest found -- resuming with context\n\n'
         sleep 0.3
 
-        claude "${resume_flags[@]}" "${user_flags[@]}" "$manifest_content"
+        command claude "${resume_flags[@]}" "${user_flags[@]}" "$manifest_content"
 
       else
         # Exit 129 but no manifest -- /resurrect-now was used or Write failed
-        printf '\n  claude-resurrect: no manifest -- plain resume\n'
-        printf '  Tip: use /resurrect (not /resurrect-now) to preserve task state.\n\n'
+        printf '\n  claude-resurrect: restarting (no manifest)\n'
+        printf '  Tip: use /resurrect instead of /resurrect-now to preserve task state.\n\n'
         sleep 0.3
 
-        claude -c "${user_flags[@]}"
+        command claude -c "${user_flags[@]}"
       fi
 
     # ── FIRST RUN: normal launch ─────────────────────────────────────────────
     else
-      claude "${user_flags[@]}"
+      command claude "${user_flags[@]}"
     fi
 
     rc=$?
@@ -76,28 +78,21 @@ cr() {
       continue
     fi
 
-    # Any other exit code: stop the loop and return it cleanly
+    # Any other exit code: stop the loop
     return $rc
   done
 }
 
-# Convenience aliases -- these just pre-set common flag combos.
-# The cr() function handles everything; these are just shortcuts.
+# Convenience shortcuts (optional -- claude itself now has the wrapper built in)
 
-# cr-yolo: skip all permission prompts (use carefully)
-cr-yolo() {
-  cr --dangerously-skip-permissions "$@"
+claude-yolo() {
+  claude --dangerously-skip-permissions "$@"
 }
 
-# cr-safe: explicit safe mode (default, no extra flags)
-cr-safe() {
-  cr "$@"
-}
-
-# cr-resume: pick up a specific named or UUID session
-# Usage: cr-resume my-session-name [extra flags]
-cr-resume() {
+# Resume a specific session by name or UUID
+# Usage: claude-resume my-session [extra flags]
+claude-resume() {
   local session_name="$1"
   shift
-  claude --resume "$session_name" "$@"
+  command claude --resume "$session_name" "$@"
 }

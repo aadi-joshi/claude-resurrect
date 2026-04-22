@@ -117,11 +117,11 @@ if [[ "$INSTALL_HOOKS" == true ]]; then
 fi
 
 # ── Install wrapper function ─────────────────────────────────────────────────
-info "Installing cr() wrapper function to $RC_FILE..."
+info "Installing claude() wrapper to $RC_FILE..."
 
 WRAPPER_MARKER="# claude-resurrect"
 if grep -q "$WRAPPER_MARKER" "$RC_FILE" 2>/dev/null; then
-  warn "cr() already present in $RC_FILE — skipping (run uninstall.sh first to reinstall)"
+  warn "claude-resurrect already present in $RC_FILE -- skipping (run uninstall.sh first to reinstall)"
 else
   {
     echo ""
@@ -129,7 +129,7 @@ else
     cat "$REPO_DIR/wrapper/claude-resurrect.sh"
     echo ""
   } >> "$RC_FILE"
-  success "cr() function added to $RC_FILE"
+  success "claude() wrapper added to $RC_FILE"
 fi
 
 # ── Done ─────────────────────────────────────────────────────────────────────
@@ -139,12 +139,11 @@ echo ""
 echo "  Reload your shell:"
 echo "    source $RC_FILE"
 echo ""
-echo "  Then start Claude with:"
-echo "    cr                              # normal launch"
-echo "    cr --dangerously-skip-permissions  # skip permission prompts"
-echo "    cr-yolo                         # shortcut for above"
+echo "  Then use claude as normal -- the wrapper is transparent:"
+echo "    claude                              # works as before, resurrection-enabled"
+echo "    claude --dangerously-skip-permissions"
 echo ""
 echo "  Inside a session, use:"
-echo "    /resurrect      → write manifest + restart (preserves task context)"
-echo "    /resurrect-now  → instant hard restart (no manifest)"
+echo "    /resurrect      -> write manifest + restart (preserves task context)"
+echo "    /resurrect-now  -> instant hard restart (no manifest)"
 echo ""

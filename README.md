@@ -19,7 +19,7 @@ This repo adds a **Resurrection Manifest** to that flow -- a structured handoff 
 ## What it does
 
 ```
-You: cr --dangerously-skip-permissions
+You: claude --dangerously-skip-permissions
            |
            v
      Claude installs an MCP server
@@ -62,7 +62,7 @@ source ~/.zshrc  # or ~/.bashrc
 The installer:
 - Copies `/resurrect` and `/resurrect-now` to `~/.claude/skills/`
 - Copies the pre-compact hook to `~/.claude/hooks/` and registers it in `~/.claude/settings.json`
-- Adds the `cr()` wrapper function to your shell rc
+- Adds a `claude()` shell function to your rc that wraps the real binary transparently
 
 To skip the hook:
 
@@ -74,14 +74,15 @@ bash install.sh --no-hooks
 
 ## Usage
 
-Replace `claude` with `cr` when starting a session:
+After install, use `claude` exactly as you always have. Nothing changes on the outside:
 
 ```bash
-cr                                    # normal launch
-cr --dangerously-skip-permissions     # skip permission prompts
-cr-yolo                               # shortcut for the above
-cr --model claude-opus-4-7            # any flags pass through
+claude                                # normal launch, resurrection-enabled
+claude --dangerously-skip-permissions # any flags pass through unchanged
+claude --model claude-opus-4-7
 ```
+
+The wrapper is a shell function that shadows the real binary. It calls `command claude` internally (which bypasses shell functions and hits the real binary directly), so there's no recursion and no conflict with your existing setup.
 
 Inside a session, Claude uses the skills directly:
 

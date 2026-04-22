@@ -12,16 +12,24 @@ description: >
 You are about to restart Claude Code. Follow these steps exactly. Do not skip
 any step. Do not add commentary between steps.
 
-## Step 1 -- Get timestamp and session ID
+## Step 1 -- Check wrapper and get timestamp/session ID
 
 Run this in the Bash tool:
 
 ```bash
-mkdir -p .claude && date -u +"%Y-%m-%dT%H:%M:%SZ" && echo "${CLAUDE_SESSION_ID:-unknown}"
+mkdir -p .claude && date -u +"%Y-%m-%dT%H:%M:%SZ" && echo "${CLAUDE_SESSION_ID:-unknown}" && echo "wrapper:${CLAUDE_RESURRECT_WRAPPER:-0}"
 ```
 
-Note the output: first line is the timestamp, second is the session ID (or "unknown"
-if the env variable is not available -- the wrapper handles this gracefully).
+Note the output: first line is the timestamp, second is the session ID, third line
+is `wrapper:1` if launched via the `claude()` shell wrapper or `wrapper:0` if not.
+
+**If `wrapper:0`:** the auto-restart mechanism is not active. This happens when
+Claude Code was launched from the desktop app or directly (not via the wrapper
+shell function). The manifest will still be written -- tell the user:
+"Manifest written to `.claude/resurrection.md`. Auto-restart is not available
+in this launch mode. To resume: close this session, open a terminal, run
+`claude -c`, and I will read the manifest and continue." Then stop -- do not
+attempt the kill command.
 
 ## Step 2 -- Write the Resurrection Manifest
 

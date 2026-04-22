@@ -16,6 +16,7 @@ claude() {
   local rc=0
   local first_run=1
   local user_flags=("$@")
+  export CLAUDE_RESURRECT_WRAPPER=1
 
   # Detect Windows/WSL2: in WSL, $PPID resolves to 1 (WSL init), not Claude Code.
   # Additionally check that powershell.exe is reachable (avoids false positives on Linux).

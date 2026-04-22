@@ -4,6 +4,8 @@
 
 <img width="209" height="195" alt="ezgif com-animated-gif-maker (1)" src="https://github.com/user-attachments/assets/0783012b-ce83-4804-af9d-48c0ca4819c2" />
 
+**Platform support:** macOS and Linux only. The automatic restart uses SIGHUP, which requires Claude Code to run as a native Unix process. Windows and WSL2 are not supported for the automatic restart (see [Known limitations](#known-limitations)).
+
 ---
 
 When Claude Code needs to restart -- to load an MCP server it just installed, pick up a hook change, apply a config update -- the mechanism already exists. Send SIGHUP to the process, catch exit code 129 in a wrapper, relaunch with `claude -c`. That part works fine.
@@ -156,7 +158,9 @@ This is not automatic resurrection -- it's a backup. If you restart manually aft
 
 **Subagents:** If Claude spawns a subagent and the subagent's Bash tool sends `kill -HUP $PPID`, it signals the subagent's parent process, not the main Claude Code session. Only trigger `/resurrect` from the main agent.
 
-**Windows (native):** SIGHUP doesn't exist on native Windows. Works on macOS, Linux, and WSL2.
+**Windows and WSL2:** The automatic restart doesn't work. Claude Code runs as a Windows process, and from inside WSL bash `$PPID` resolves to 1 (the WSL init), not the Claude Code process. `kill -HUP 1` fails. This includes WSL2 and the Claude Code desktop app on Windows.
+
+The manifest itself still works on Windows -- Claude can write `.claude/resurrection.md` manually. You just have to resume yourself: exit Claude, run `claude -c`, then say "Read `.claude/resurrection.md` and continue." Less automatic, same result.
 
 **Docker:** Session files live in `~/.claude/`. If the home directory isn't mounted as a volume, `--resume` has nothing to resume. Mount it or bind-mount `.claude/`.
 

@@ -93,9 +93,17 @@ The `cr()` wrapper can be updated to catch exit code 129 on macOS as well — it
 
 ---
 
-## WSL2
+## WSL2 / Windows
 
-Works the same as Linux. No special configuration needed.
+The automatic restart does **not** work on Windows or WSL2. Claude Code runs as a Windows process, and from inside WSL bash `$PPID` resolves to 1 (the WSL init process), not the Claude Code process. `kill -HUP 1` fails.
+
+You can still use the manifest concept manually:
+1. Ask Claude to write the manifest: *"Write a resurrection manifest to `.claude/resurrection.md` summarizing what we've done and what to do next."*
+2. Exit Claude (Ctrl+C or just close)
+3. Run `claude -c` to resume the session
+4. Say: *"Read `.claude/resurrection.md` and continue."*
+
+It's less automatic but the context handoff works the same way.
 
 ---
 

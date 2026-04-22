@@ -2,33 +2,49 @@
 # claude-resurrect wrapper
 # Source this in your .zshrc or .bashrc.
 #
-# This defines a shell function named `claude` that shadows the real binary.
+# Defines a shell function named `claude` that shadows the real binary.
 # Inside the function, `command claude` bypasses functions/aliases and calls
-# the actual claude binary directly -- no recursion.
+# the actual binary directly -- no recursion.
 #
-# How it works:
-#   1. You run `claude` as normal -- nothing changes
-#   2. If claude exits with code 129 (SIGHUP), a resurrection was triggered
-#   3. Checks for .claude/resurrection.md written by the /resurrect skill
-#   4. Injects that manifest as the first prompt in the resumed session
-#   5. Claude wakes up knowing exactly where it left off
+# Platform support:
+#   macOS / Linux : uses SIGHUP (kill -HUP $PPID, exit 129) for automatic restart
+#   Windows / WSL2: uses a background file watcher + PowerShell to kill Claude Code
 
 claude() {
   local manifest=".claude/resurrection.md"
-  local rc
+  local resurrect_flag=".claude/resurrect.flag"
+  local rc=0
   local first_run=1
   local user_flags=("$@")
 
+  # Detect Windows/WSL2: in WSL, $PPID resolves to 1 (WSL init), not Claude Code.
+  # Additionally check that powershell.exe is reachable (avoids false positives on Linux).
+  local is_windows=0
+  if [[ "$PPID" -eq 1 ]] && command -v powershell.exe > /dev/null 2>&1; then
+    is_windows=1
+  fi
+
   while true; do
 
-    # ── SUBSEQUENT RUNS: look for the resurrection manifest ─────────────────
+    # ── START WINDOWS WATCHER ────────────────────────────────────────────────
+    # On Windows/WSL, SIGHUP can't reach Claude Code. Instead, a background
+    # subshell polls for .claude/resurrect.flag and kills Claude Code via
+    # PowerShell when it appears.
+    local watcher_pid=""
+    if [[ $is_windows -eq 1 ]]; then
+      _claude_resurrect_watcher "$resurrect_flag" &
+      watcher_pid=$!
+    fi
+
+    # ── LAUNCH CLAUDE ────────────────────────────────────────────────────────
     if [[ $first_run -eq 0 ]]; then
+
       if [[ -f "$manifest" ]]; then
-        # Extract session ID from the manifest (written by the skill)
+        # Extract session ID from manifest
         local sid
         sid=$(grep -m1 "^session_id:" "$manifest" 2>/dev/null | awk '{print $2}' | tr -d '[:space:]')
 
-        # Fallback: if skill couldn't capture session ID, find the most recent JSONL
+        # Fallback: find from the most recently modified JSONL (shellcheck-safe)
         if [[ -z "$sid" || "$sid" == "unknown" ]]; then
           local recent_jsonl=""
           while IFS= read -r -d '' f; do
@@ -37,12 +53,11 @@ claude() {
           [[ -n "$recent_jsonl" ]] && sid=$(basename "$recent_jsonl" .jsonl)
         fi
 
-        # Read and delete the manifest (single-use)
         local manifest_content
         manifest_content=$(cat "$manifest")
         rm -f "$manifest"
 
-        # Only use --resume if we have a valid UUID; otherwise fall back to -c
+        # Use --resume <uuid> when we have a valid session ID; otherwise -c
         local resume_flags=()
         if [[ "$sid" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
           resume_flags=(--resume "$sid")
@@ -52,45 +67,73 @@ claude() {
 
         printf '\n  claude-resurrect: manifest found -- resuming with context\n\n'
         sleep 0.3
-
         command claude "${resume_flags[@]}" "${user_flags[@]}" "$manifest_content"
 
       else
-        # Exit 129 but no manifest -- /resurrect-now was used or Write failed
         printf '\n  claude-resurrect: restarting (no manifest)\n'
         printf '  Tip: use /resurrect instead of /resurrect-now to preserve task state.\n\n'
         sleep 0.3
-
         command claude -c "${user_flags[@]}"
       fi
 
-    # ── FIRST RUN: normal launch ─────────────────────────────────────────────
     else
       command claude "${user_flags[@]}"
     fi
 
     rc=$?
     first_run=0
+    # Stop the watcher (it may already be dead if it triggered a kill)
+    [[ -n "$watcher_pid" ]] && kill "$watcher_pid" 2>/dev/null
 
-    # exit code 129 = SIGHUP = resurrection requested
-    if [[ $rc -eq 129 ]]; then
-      printf '\n  claude-resurrect: caught exit 129 -- checking for manifest...\n'
+    # ── CHECK FOR RESURRECTION ───────────────────────────────────────────────
+    # Unix:    exit 129 = SIGHUP received
+    # Windows: resurrect.flag exists (written by skill before watcher killed claude)
+    if [[ $rc -eq 129 ]] || [[ -f "$resurrect_flag" ]]; then
+      rm -f "$resurrect_flag"
+      printf '\n  claude-resurrect: caught exit -- checking for manifest...\n'
       continue
     fi
 
-    # Any other exit code: stop the loop
     return $rc
   done
 }
 
-# Convenience shortcuts (optional -- claude itself now has the wrapper built in)
+# Background watcher used on Windows/WSL2.
+# Polls for the resurrect flag, then kills Claude Code via PowerShell.
+_claude_resurrect_watcher() {
+  local flag="$1"
+  while [[ ! -f "$flag" ]]; do
+    sleep 0.3
+  done
+  # Find the node.exe process running claude (matched by command line)
+  # and stop it. Falls back to the most recently started node.exe.
+  powershell.exe -Command "
+    \$target = Get-Process node -ErrorAction SilentlyContinue |
+      ForEach-Object {
+        \$id = \$_.Id
+        \$cmd = try {
+          (Get-CimInstance Win32_Process -Filter \"ProcessId=\$id\").CommandLine
+        } catch { '' }
+        [PSCustomObject]@{ Proc = \$_; Cmd = \$cmd }
+      } |
+      Where-Object { \$_.Cmd -match 'claude' } |
+      Sort-Object { \$_.Proc.StartTime } -Descending |
+      Select-Object -First 1 -ExpandProperty Proc
+    if (-not \$target) {
+      \$target = Get-Process node -ErrorAction SilentlyContinue |
+        Sort-Object StartTime -Descending |
+        Select-Object -First 1
+    }
+    if (\$target) { \$target | Stop-Process -Force }
+  " 2>/dev/null
+}
+
+# Convenience shortcuts
 
 claude-yolo() {
   claude --dangerously-skip-permissions "$@"
 }
 
-# Resume a specific session by name or UUID
-# Usage: claude-resume my-session [extra flags]
 claude-resume() {
   local session_name="$1"
   shift

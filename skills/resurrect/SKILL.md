@@ -69,13 +69,17 @@ missing or vague, rewrite it before continuing.
 Run this exact command. Nothing else. No output message first.
 
 ```bash
-kill -HUP $PPID
+mkdir -p .claude && touch .claude/resurrect.flag && kill -HUP $PPID
 ```
 
-This sends SIGHUP to Claude Code (your parent process). It exits with code 129.
-The `cr` wrapper catches that, reads the manifest, deletes it, and restarts
-Claude with the manifest as the first message -- so you wake up knowing exactly
-where you were.
+This does two things:
+- Writes `.claude/resurrect.flag` -- the Windows/WSL2 watcher polls for this
+  file and kills Claude Code via PowerShell when it appears
+- Sends SIGHUP to Claude Code -- on macOS/Linux, the process exits with code 129
+
+The `claude` wrapper catches either signal (exit 129 or the flag file), reads
+the manifest, deletes it, and restarts Claude with the manifest as the first
+message -- so you wake up knowing exactly where you were.
 
 ---
 

@@ -9,7 +9,7 @@ description: >
 Run this command immediately to restart Claude Code:
 
 ```bash
-kill -HUP $PPID
+mkdir -p .claude && touch .claude/resurrect.flag && kill -HUP $PPID
 ```
 
 Do not write anything before running it. Do not confirm with the user.

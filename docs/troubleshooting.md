@@ -95,15 +95,21 @@ The `cr()` wrapper can be updated to catch exit code 129 on macOS as well — it
 
 ## WSL2 / Windows
 
-The automatic restart does **not** work on Windows or WSL2. Claude Code runs as a Windows process, and from inside WSL bash `$PPID` resolves to 1 (the WSL init process), not the Claude Code process. `kill -HUP 1` fails.
+The automatic restart works on Windows/WSL2 but through a different mechanism than macOS/Linux.
 
-You can still use the manifest concept manually:
-1. Ask Claude to write the manifest: *"Write a resurrection manifest to `.claude/resurrection.md` summarizing what we've done and what to do next."*
-2. Exit Claude (Ctrl+C or just close)
-3. Run `claude -c` to resume the session
-4. Say: *"Read `.claude/resurrection.md` and continue."*
+In WSL, `$PPID` resolves to 1 (WSL init), not the Claude Code Windows process. `kill -HUP 1` fails silently.
 
-It's less automatic but the context handoff works the same way.
+The wrapper handles this automatically:
+1. On startup, it detects WSL by checking `$PPID -eq 1` and `powershell.exe` being available
+2. It starts a background shell (`_claude_resurrect_watcher`) that polls for `.claude/resurrect.flag` every 0.3s
+3. The skill writes that flag before attempting `kill -HUP $PPID`
+4. When the watcher sees the flag, it runs PowerShell to find and stop the node.exe running Claude
+
+If the watcher is not triggering, check that `powershell.exe` is accessible from WSL:
+```bash
+command -v powershell.exe
+```
+It should print `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe` or similar. If not, WSL interop is disabled -- enable it in `/etc/wsl.conf` with `[interop] enabled = true`.
 
 ---
 

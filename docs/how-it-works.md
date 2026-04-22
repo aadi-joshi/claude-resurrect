@@ -24,47 +24,58 @@ The manifest is deleted after being read (single-use), so it doesn't accumulate.
 ## Step by Step
 
 ```
-User runs: cr --dangerously-skip-permissions
-     │
-     ▼
-cr() wrapper launches claude normally (first_run=1)
-     │
-     ▼
+User runs: claude --dangerously-skip-permissions
+     |
+     v
+claude() wrapper launches claude normally (first_run=1)
+On Windows/WSL2: also starts _claude_resurrect_watcher in background,
+polling for .claude/resurrect.flag every 0.3s
+     |
+     v
 Claude does work... installs an MCP server...
-     │
-     ▼
+     |
+     v
 Claude invokes /resurrect skill
-     │
-     ├── Step 1: runs `date && echo $CLAUDE_SESSION_ID` in bash
-     ├── Step 2: writes .claude/resurrection.md via Write tool
-     ├── Step 3: reads it back to verify
-     └── Step 4: runs `kill -HUP $PPID`
-          │
-          ▼
-     Claude Code exits with code 129 (128 + SIGHUP signal 1)
-          │
-          ▼
-     cr() loop: rc=129 → continue
-          │
-          ▼
-     cr() finds .claude/resurrection.md
-          │
-          ├── Extracts session_id from manifest
-          ├── Reads full manifest content
-          ├── Deletes the file
-          └── Runs: claude --resume <session_id> [original flags] "<manifest content>"
-               │
-               ▼
+     |
+     +-- Step 1: runs `date && echo $CLAUDE_SESSION_ID` in bash
+     +-- Step 2: writes .claude/resurrection.md via Write tool
+     +-- Step 3: reads it back to verify
+     +-- Step 4: runs `touch .claude/resurrect.flag && kill -HUP $PPID`
+          |
+          +-- macOS/Linux: SIGHUP reaches Claude Code, exits with code 129
+          +-- Windows/WSL2: watcher sees the flag, runs PowerShell to
+               kill node.exe running Claude, Claude Code exits
+          |
+          v
+     claude() loop: rc=129 OR .claude/resurrect.flag exists -> continue
+          |
+          v
+     claude() finds .claude/resurrection.md
+          |
+          +-- Extracts session_id from manifest
+          +-- Reads full manifest content
+          +-- Deletes the file
+          +-- Runs: claude --resume <session_id> [original flags] "<manifest content>"
+               |
+               v
           Claude wakes up. First message IS the manifest.
           Claude reads the resume point and immediate action.
-          Claude continues working — no user intervention needed.
+          Claude continues working -- no user intervention needed.
 ```
 
 ## Why `kill -HUP $PPID`
 
-From within Claude's Bash tool, `$PPID` points to the Claude Code Node.js process. `SIGHUP` (signal 1) is the Unix convention for "reload configuration." The shell convention for exit codes is `128 + signal_number`, so SIGHUP produces exit code `129`. The `cr()` wrapper checks for exactly this code.
+On macOS/Linux, `$PPID` from within Claude's Bash tool points to the Claude Code Node.js process. `SIGHUP` (signal 1) is the Unix convention for "reload configuration." The shell convention for exit codes is `128 + signal_number`, so SIGHUP produces exit code `129`. The `claude()` wrapper checks for this code.
 
-Exit code `129` was chosen over an arbitrary code like `42` because it follows the POSIX standard — any Unix programmer reading the wrapper immediately understands what it means.
+Exit code `129` follows the POSIX standard -- any Unix programmer reading the wrapper immediately understands what it means.
+
+## Why the flag file on Windows
+
+In WSL2, Claude Code runs as a Windows process. From inside the WSL bash environment, `$PPID` resolves to `1` (the WSL init process), not the Claude Code process. `kill -HUP 1` fails silently.
+
+The workaround: the skill writes `.claude/resurrect.flag` before attempting the kill. A background bash process started by the wrapper polls for this file. When it appears, it invokes PowerShell to find the node.exe process whose command line contains "claude" and calls `Stop-Process -Force` on it. The wrapper then detects the flag on the next loop iteration and proceeds with the manifest-based restart.
+
+This adds a ~0.3s average latency on Windows (polling interval) versus near-instant on Unix, but is otherwise identical in behavior.
 
 ## Why Not Just `claude -c`
 
@@ -78,7 +89,7 @@ A separate `pre-compact.mjs` hook fires automatically before Claude Code compact
 
 **Subagent PPID:** If Claude spawns a subagent and the subagent's Bash tool runs `kill -HUP $PPID`, it kills the subagent's parent — which might be the subagent orchestrator process, not the main Claude Code session. This is a known limitation. For now: only trigger `/resurrect` from the main agent, not from within a subagent.
 
-**Windows (native):** SIGHUP doesn't exist on native Windows. This works on macOS, Linux, and WSL2. Native Windows support would require a different signal mechanism.
+**Native Windows (no WSL):** Not supported. The wrapper is a bash function -- it requires WSL2 or a Unix shell. Claude Code on native Windows without WSL2 can still use the manifest concept manually: write `.claude/resurrection.md`, exit, run `claude -c`, and tell Claude to read it.
 
 **Very short sessions:** If the session is very short (< ~10 messages), `--resume` might not find enough context to compact, and the manifest injection becomes the dominant context. That's actually fine — it works better in that case.
 

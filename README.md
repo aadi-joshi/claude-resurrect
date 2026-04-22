@@ -4,7 +4,7 @@
 
 <img width="209" height="195" alt="ezgif com-animated-gif-maker (1)" src="https://github.com/user-attachments/assets/0783012b-ce83-4804-af9d-48c0ca4819c2" />
 
-**Platform support:** macOS, Linux, and Windows (via WSL2). The automatic restart uses SIGHUP on Unix and a background PowerShell process watcher on Windows/WSL2.
+**Platform support:** macOS, Linux, and Windows shell environments (WSL2 / Git Bash / MSYS). The automatic restart uses SIGHUP on Unix and a background PowerShell process watcher on Windows shells.
 
 ---
 
@@ -35,7 +35,7 @@ You: claude --dangerously-skip-permissions
            +-- runs: touch .claude/resurrect.flag && kill -HUP $PPID
                 |
                 +-- macOS/Linux: Claude Code exits 129 (SIGHUP)
-                +-- Windows/WSL2: background watcher sees the flag,
+                +-- Windows shells: background watcher sees the flag,
                      kills node.exe via PowerShell, Claude Code exits
                 |
                 v
@@ -169,7 +169,7 @@ This is not automatic resurrection -- it's a backup. If you restart manually aft
 
 **Subagents:** If Claude spawns a subagent and the subagent's Bash tool sends `kill -HUP $PPID`, it signals the subagent's parent process, not the main Claude Code session. Only trigger `/resurrect` from the main agent.
 
-**Windows and WSL2:** Works, but differently. In WSL, `$PPID` resolves to 1 (WSL init), not the Claude Code process -- so SIGHUP can't reach it. Instead, the wrapper starts a background shell that polls for `.claude/resurrect.flag`. The skill writes that flag before the `kill -HUP` attempt. When the watcher sees the file, it uses PowerShell to find and stop the node.exe process running Claude, triggering the restart. Same result, different mechanism.
+**Windows shells (WSL2 / Git Bash / MSYS):** Works, but differently. In these environments, `kill -HUP $PPID` is often unreliable for reaching the Claude Code process. Instead, the wrapper starts a background shell that polls for `.claude/resurrect.flag`. The skill writes that flag before the `kill -HUP` attempt. When the watcher sees the file, it uses PowerShell to find and stop the node.exe process running Claude, triggering the restart. Same result, different mechanism.
 
 **Docker:** Session files live in `~/.claude/`. If the home directory isn't mounted as a volume, `--resume` has nothing to resume. Mount it or bind-mount `.claude/`.
 

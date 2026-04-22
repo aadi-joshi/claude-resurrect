@@ -8,7 +8,7 @@
 #
 # Platform support:
 #   macOS / Linux : uses SIGHUP (kill -HUP $PPID, exit 129) for automatic restart
-#   Windows / WSL2: uses a background file watcher + PowerShell to kill Claude Code
+#   Windows shells : uses a background file watcher + PowerShell to kill Claude Code
 
 claude() {
   local manifest=".claude/resurrection.md"
@@ -18,11 +18,17 @@ claude() {
   local user_flags=("$@")
   export CLAUDE_RESURRECT_WRAPPER=1
 
-  # Detect Windows/WSL2: in WSL, $PPID resolves to 1 (WSL init), not Claude Code.
-  # Additionally check that powershell.exe is reachable (avoids false positives on Linux).
+  # Detect Windows-like shells where SIGHUP does not reliably reach Claude Code.
+  # We gate on powershell.exe being available, then detect WSL/MSYS/MINGW/Cygwin.
   local is_windows=0
-  if [[ "$PPID" -eq 1 ]] && command -v powershell.exe > /dev/null 2>&1; then
-    is_windows=1
+  local uname_s=""
+  uname_s="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  if command -v powershell.exe > /dev/null 2>&1; then
+    if [[ -n "$WSL_DISTRO_NAME" ]] || [[ -n "$WSL_INTEROP" ]] || [[ "$PPID" -eq 1 ]] || \
+       [[ "$uname_s" == *microsoft* ]] || [[ "$uname_s" == mingw* ]] || \
+       [[ "$uname_s" == msys* ]] || [[ "$uname_s" == cygwin* ]]; then
+      is_windows=1
+    fi
   fi
 
   while true; do
@@ -99,7 +105,7 @@ claude() {
   done
 }
 
-# Background watcher used on Windows/WSL2.
+# Background watcher used on Windows-like shells.
 # Polls for the resurrect flag, then kills Claude Code via PowerShell.
 _claude_resurrect_watcher() {
   local flag="$1"

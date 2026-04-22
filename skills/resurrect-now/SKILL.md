@@ -1,9 +1,6 @@
 ---
 name: resurrect-now
-description: >
-  Instant hard restart -- no manifest written. Use only when you need a quick
-  reload and have no task state worth preserving. For mid-task restarts, use
-  /resurrect instead.
+description: Instant hard restart -- no manifest written. Use only when you need a quick reload and have no task state worth preserving. For mid-task restarts, use /resurrect instead.
 ---
 
 First check if the wrapper is active:

@@ -93,19 +93,19 @@ The `cr()` wrapper can be updated to catch exit code 129 on macOS as well — it
 
 ---
 
-## WSL2 / Windows
+## WSL2 / Windows shells
 
-The automatic restart works on Windows/WSL2 but through a different mechanism than macOS/Linux.
+The automatic restart works on Windows shells (WSL2/Git Bash/MSYS) but through a different mechanism than macOS/Linux.
 
 In WSL, `$PPID` resolves to 1 (WSL init), not the Claude Code Windows process. `kill -HUP 1` fails silently.
 
 The wrapper handles this automatically:
-1. On startup, it detects WSL by checking `$PPID -eq 1` and `powershell.exe` being available
+1. On startup, it detects a Windows shell by requiring `powershell.exe` and checking runtime signals (`WSL_DISTRO_NAME`, `WSL_INTEROP`, `$PPID -eq 1`, or Windows-like `uname` values such as `MINGW`/`MSYS`)
 2. It starts a background shell (`_claude_resurrect_watcher`) that polls for `.claude/resurrect.flag` every 0.3s
 3. The skill writes that flag before attempting `kill -HUP $PPID`
 4. When the watcher sees the flag, it runs PowerShell to find and stop the node.exe running Claude
 
-If the watcher is not triggering, check that `powershell.exe` is accessible from WSL:
+If the watcher is not triggering, check that `powershell.exe` is accessible from your shell:
 ```bash
 command -v powershell.exe
 ```

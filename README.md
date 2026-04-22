@@ -2,10 +2,7 @@
 
 > Claude kills itself. Then wakes back up. And knows exactly where it left off.
 
-<!-- drop a banner image here if you have one
-     suggested: terminal split -- left side shows Claude writing the manifest,
-     right side shows Claude reading it on wakeup. 1200x400px works for GitHub.
-     ![banner](./docs/banner.png) -->
+<img width="209" height="195" alt="ezgif com-animated-gif-maker (1)" src="https://github.com/user-attachments/assets/0783012b-ce83-4804-af9d-48c0ca4819c2" />
 
 ---
 

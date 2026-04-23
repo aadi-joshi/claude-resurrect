@@ -4,7 +4,7 @@
 
 <img width="209" height="195" alt="ezgif com-animated-gif-maker (1)" src="https://github.com/user-attachments/assets/0783012b-ce83-4804-af9d-48c0ca4819c2" />
 
-**Platform support:** macOS, Linux, and Windows shell environments (WSL2 / Git Bash / MSYS). The automatic restart uses SIGHUP on Unix and a background PowerShell process watcher on Windows shells.
+**Platform support:** macOS, Linux, WSL2, Git Bash/MSYS, and **native Windows PowerShell** (Windows Terminal). The automatic restart uses SIGHUP on Unix and a background process watcher on Windows.
 
 ---
 
@@ -58,6 +58,8 @@ The manifest is single-use. Deleted after the wrapper reads it. If you resurrect
 
 ## Install
 
+### macOS / Linux / WSL2 / Git Bash
+
 ```bash
 git clone https://github.com/aadi-joshi/claude-resurrect
 cd claude-resurrect
@@ -71,16 +73,26 @@ The installer:
 - Adds a `claude()` shell function to your rc that wraps the real binary transparently
 - Patches `~/.claude/CLAUDE.md` with the resurrection protocol so Claude knows when to trigger restarts automatically
 
-To skip the hook:
-
 ```bash
-bash install.sh --no-hooks
+bash install.sh --no-hooks   # skip the pre-compact hook
+bash update.sh               # update to the latest version
 ```
 
-To update later:
+### Windows (PowerShell / Windows Terminal)
 
-```bash
-bash update.sh
+```powershell
+git clone https://github.com/aadi-joshi/claude-resurrect
+cd claude-resurrect
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+.\install.ps1
+. $PROFILE
+```
+
+The PowerShell installer does the same thing as the bash installer -- skills, hook, wrapper, CLAUDE.md -- but adds a `claude()` function to your `$PROFILE` instead of `.bashrc`.
+
+```powershell
+.\install.ps1 -NoHooks   # skip the pre-compact hook
+.\uninstall.ps1          # remove everything
 ```
 
 ---
@@ -169,7 +181,7 @@ This is not automatic resurrection -- it's a backup. If you restart manually aft
 
 **Subagents:** If Claude spawns a subagent and the subagent's Bash tool sends `kill -HUP $PPID`, it signals the subagent's parent process, not the main Claude Code session. Only trigger `/resurrect` from the main agent.
 
-**Windows shells (WSL2 / Git Bash / MSYS):** Works, but differently. In these environments, `kill -HUP $PPID` is often unreliable for reaching the Claude Code process. Instead, the wrapper starts a background shell that polls for `.claude/resurrect.flag`. The skill writes that flag before the `kill -HUP` attempt. When the watcher sees the file, it uses PowerShell to find and stop the node.exe process running Claude, triggering the restart. Same result, different mechanism.
+**Windows (WSL2 / Git Bash / MSYS / PowerShell):** Works, but uses a different mechanism. In Windows environments, `kill -HUP $PPID` is unreliable. Both the bash and PowerShell wrappers start a background watcher that polls for `.claude/resurrect.flag`. The skill writes that flag before attempting the kill. When the watcher sees the file, it calls `Stop-Process` on `claude.exe` (or `node.exe` for npm-only installs), triggering the restart. Same result, ~0.3s extra latency.
 
 **Docker:** Session files live in `~/.claude/`. If the home directory isn't mounted as a volume, `--resume` has nothing to resume. Mount it or bind-mount `.claude/`.
 
@@ -179,7 +191,9 @@ This is not automatic resurrection -- it's a backup. If you restart manually aft
 
 ## How it works (technical)
 
-`kill -HUP $PPID` from within Claude's Bash tool sends SIGHUP to the Claude Code Node.js process. Exit code is `129` (POSIX: `128 + signal_number`). The `cr()` wrapper loops on this code, checks for `.claude/resurrection.md`, extracts the session ID, deletes the file, then relaunches with `--resume <id> "<manifest>"`.
+On macOS/Linux, `kill -HUP $PPID` from within Claude's Bash tool sends SIGHUP to the Claude Code process. Exit code is `129` (POSIX: `128 + signal_number`). The `claude()` wrapper loops on this exit code, checks for `.claude/resurrection.md`, extracts the session ID, deletes the file, then relaunches with `--resume <id> "<manifest>"`.
+
+On Windows, the flag file replaces SIGHUP. The wrapper (bash or PowerShell) starts a background watcher that calls PowerShell's `Stop-Process` on `claude.exe` when the flag appears.
 
 More detail: [docs/how-it-works.md](./docs/how-it-works.md)
 Troubleshooting: [docs/troubleshooting.md](./docs/troubleshooting.md)
@@ -190,16 +204,19 @@ Troubleshooting: [docs/troubleshooting.md](./docs/troubleshooting.md)
 
 ```
 claude-resurrect/
-├── install.sh                         one-liner install
-├── uninstall.sh                       clean removal
-├── update.sh                          git pull + reinstall
+├── install.sh                         bash install (macOS/Linux/WSL/Git Bash)
+├── install.ps1                        PowerShell install (Windows Terminal)
+├── uninstall.sh                       bash removal
+├── uninstall.ps1                      PowerShell removal
+├── update.sh                          git pull + reinstall (bash)
 ├── wrapper/
-│   └── claude-resurrect.sh            the cr() shell function
+│   ├── claude-resurrect.sh            claude() shell function (bash/zsh)
+│   └── claude-resurrect.ps1           claude() function (PowerShell)
 ├── skills/
 │   ├── resurrect/
-│   │   └── SKILL.md                   write manifest -> kill -HUP $PPID
+│   │   └── SKILL.md                   write manifest -> restart
 │   └── resurrect-now/
-│       └── SKILL.md                   !`kill -HUP $PPID` (instant, no manifest)
+│       └── SKILL.md                   instant restart (no manifest)
 ├── hooks/
 │   └── pre-compact.mjs                backup before compaction
 ├── examples/

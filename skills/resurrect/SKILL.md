@@ -20,12 +20,14 @@ Note the output: first line is the timestamp, second is the session ID, third li
 is `wrapper:1` if launched via the `claude()` shell wrapper or `wrapper:0` if not.
 
 **If `wrapper:0`:** the auto-restart mechanism is not active. This happens when
-Claude Code was launched from the desktop app or directly (not via the wrapper
-shell function). The manifest will still be written -- tell the user:
+Claude Code was launched from the desktop app or directly (not via a wrapper
+function). The manifest will still be written -- tell the user:
 "Manifest written to `.claude/resurrection.md`. Auto-restart is not available
-in this launch mode. To resume: close this session, open a terminal, run
-`claude -c`, and I will read the manifest and continue." Then stop -- do not
-attempt the kill command.
+in this launch mode. Options to resume:
+- **bash/zsh**: run `source ~/.bashrc` (or `~/.zshrc`), then `claude -c`
+- **PowerShell**: run `. $PROFILE`, then `claude -c`
+- **Any terminal**: run `claude -c` and tell Claude to read `.claude/resurrection.md`"
+Then stop -- do not attempt the kill command.
 
 ## Step 2 -- Write the Resurrection Manifest
 

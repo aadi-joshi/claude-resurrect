@@ -60,10 +60,6 @@ claude() {
           [[ -n "$recent_jsonl" ]] && sid=$(basename "$recent_jsonl" .jsonl)
         fi
 
-        local manifest_content
-        manifest_content=$(cat "$manifest")
-        rm -f "$manifest"
-
         # Use --resume <uuid> when we have a valid session ID; otherwise -c
         local resume_flags=()
         if [[ "$sid" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
@@ -74,7 +70,19 @@ claude() {
 
         printf '\n  claude-resurrect: manifest found -- resuming with context\n\n'
         sleep 0.3
-        command claude "${resume_flags[@]}" "${user_flags[@]}" "$manifest_content"
+
+        if [[ $is_windows -eq 1 ]]; then
+          # On Windows, keep the manifest on disk and inject a short trigger.
+          # Multi-line content passed through Windows arg parsing (CommandLineToArgvW)
+          # gets split at newlines; file-reference injection avoids this.
+          command claude "${resume_flags[@]}" "${user_flags[@]}" \
+            "Resurrection: read .claude/resurrection.md with the Read tool, then run: rm -f .claude/resurrection.md -- then execute the Immediate Action in the manifest without asking for confirmation."
+        else
+          local manifest_content
+          manifest_content=$(cat "$manifest")
+          rm -f "$manifest"
+          command claude "${resume_flags[@]}" "${user_flags[@]}" "$manifest_content"
+        fi
 
       else
         printf '\n  claude-resurrect: restarting (no manifest)\n'
@@ -112,22 +120,28 @@ _claude_resurrect_watcher() {
   while [[ ! -f "$flag" ]]; do
     sleep 0.3
   done
-  # Find the node.exe process running claude (matched by command line)
-  # and stop it. Falls back to the most recently started node.exe.
+  # Kill Claude Code. Claude Code ships as a native claude.exe binary on Windows;
+  # older npm-only installs run as node.exe. Try claude.exe first, then node.exe
+  # (matched by command line containing "claude"), then any recent node.exe.
   powershell.exe -Command "
-    \$target = Get-Process node -ErrorAction SilentlyContinue |
-      ForEach-Object {
-        \$id = \$_.Id
-        \$cmd = try {
-          (Get-CimInstance Win32_Process -Filter \"ProcessId=\$id\").CommandLine
-        } catch { '' }
-        [PSCustomObject]@{ Proc = \$_; Cmd = \$cmd }
-      } |
-      Where-Object { \$_.Cmd -match 'claude' } |
-      Sort-Object { \$_.Proc.StartTime } -Descending |
-      Select-Object -First 1 -ExpandProperty Proc
+    \$target = Get-Process -Name claude -ErrorAction SilentlyContinue |
+      Sort-Object StartTime -Descending |
+      Select-Object -First 1
     if (-not \$target) {
-      \$target = Get-Process node -ErrorAction SilentlyContinue |
+      \$target = Get-Process -Name node -ErrorAction SilentlyContinue |
+        ForEach-Object {
+          \$id = \$_.Id
+          \$cmd = try {
+            (Get-CimInstance Win32_Process -Filter \"ProcessId=\$id\" -ErrorAction SilentlyContinue).CommandLine
+          } catch { '' }
+          [PSCustomObject]@{ Proc = \$_; Cmd = \$cmd }
+        } |
+        Where-Object { \$_.Cmd -match 'claude' } |
+        Sort-Object { \$_.Proc.StartTime } -Descending |
+        Select-Object -First 1 -ExpandProperty Proc
+    }
+    if (-not \$target) {
+      \$target = Get-Process -Name node -ErrorAction SilentlyContinue |
         Sort-Object StartTime -Descending |
         Select-Object -First 1
     }

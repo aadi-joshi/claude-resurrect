@@ -69,13 +69,20 @@ On macOS/Linux, `$PPID` from within Claude's Bash tool points to the Claude Code
 
 Exit code `129` follows the POSIX standard -- any Unix programmer reading the wrapper immediately understands what it means.
 
-## Why the flag file on Windows shells
+## Why the flag file on Windows
 
-In Windows shell environments (WSL2/Git Bash/MSYS), Claude Code runs as a Windows process and `kill -HUP $PPID` is often unreliable for reaching it directly. In WSL2, `$PPID` may resolve to `1` (the WSL init process), so `kill -HUP 1` fails silently.
+In Windows environments (WSL2/Git Bash/MSYS/PowerShell), Claude Code runs as a native Windows process (`claude.exe`) and `kill -HUP $PPID` is unreliable:
+- In WSL2, `$PPID` resolves to `1` (the WSL init process), so `kill -HUP 1` fails silently
+- In Git Bash/MSYS, SIGHUP may not propagate to native Windows processes
+- In PowerShell, there is no SIGHUP concept at all
 
-The workaround: the skill writes `.claude/resurrect.flag` before attempting the kill. A background bash process started by the wrapper polls for this file. When it appears, it invokes PowerShell to find the node.exe process whose command line contains "claude" and calls `Stop-Process -Force` on it. The wrapper then detects the flag on the next loop iteration and proceeds with the manifest-based restart.
+The workaround for all Windows environments: the skill writes `.claude/resurrect.flag` before attempting the kill. Both the bash and PowerShell wrappers start a background watcher on launch. When the watcher sees the flag, it calls PowerShell's `Stop-Process -Force` on `claude.exe` (preferred) or the most recent `node.exe` matching "claude" (npm-only fallback). The wrapper detects the flag on return and proceeds with the manifest-based restart.
 
-This adds a ~0.3s average latency on Windows (polling interval) versus near-instant on Unix, but is otherwise identical in behavior.
+This adds ~0.3s average latency on Windows versus near-instant on Unix.
+
+### PowerShell wrapper difference
+
+The PowerShell wrapper keeps the manifest file on disk instead of passing its content as a CLI argument. This avoids a Windows limitation: multi-line strings passed through cmd.exe shims (`.cmd` files) are truncated at newlines. By keeping the file on disk and injecting a short trigger message, the PowerShell wrapper avoids all quoting and encoding issues. The CLAUDE.md protocol tells Claude to read and delete the file when it receives the trigger message.
 
 ## Why Not Just `claude -c`
 
@@ -89,7 +96,7 @@ A separate `pre-compact.mjs` hook fires automatically before Claude Code compact
 
 **Subagent PPID:** If Claude spawns a subagent and the subagent's Bash tool runs `kill -HUP $PPID`, it kills the subagent's parent — which might be the subagent orchestrator process, not the main Claude Code session. This is a known limitation. For now: only trigger `/resurrect` from the main agent, not from within a subagent.
 
-**Native Windows (no WSL):** Not supported. The wrapper is a bash function -- it requires WSL2 or a Unix shell. Claude Code on native Windows without WSL2 can still use the manifest concept manually: write `.claude/resurrection.md`, exit, run `claude -c`, and tell Claude to read it.
+**Native Windows (PowerShell):** Supported via `install.ps1` and the PowerShell wrapper. Uses the flag-file mechanism with a file-reference manifest injection. See README for install instructions.
 
 **Very short sessions:** If the session is very short (< ~10 messages), `--resume` might not find enough context to compact, and the manifest injection becomes the dominant context. That's actually fine — it works better in that case.
 

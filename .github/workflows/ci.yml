@@ -15,6 +15,7 @@ jobs:
         run: |
           shellcheck install.sh
           shellcheck uninstall.sh
+          shellcheck update.sh
           shellcheck wrapper/claude-resurrect.sh
 
   node-lint:
@@ -26,3 +27,27 @@ jobs:
           node-version: '20'
       - name: Check hook syntax
         run: node --check hooks/pre-compact.mjs
+
+  ps-lint:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check PowerShell syntax
+        shell: pwsh
+        run: |
+          $files = @(
+            'install.ps1',
+            'uninstall.ps1',
+            'wrapper/claude-resurrect.ps1'
+          )
+          foreach ($f in $files) {
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $f).Path, [ref]$null, [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              Write-Error "$f has syntax errors:`n$($errors | Out-String)"
+              exit 1
+            }
+            Write-Host "ok $f"
+          }

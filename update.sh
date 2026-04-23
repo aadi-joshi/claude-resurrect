@@ -22,3 +22,8 @@ bash "$REPO_DIR/install.sh"
 
 ok "Done. Reload your shell to pick up any wrapper changes."
 echo ""
+echo "  If you also use the PowerShell wrapper, update it with:"
+echo "    powershell -ExecutionPolicy Bypass -File uninstall.ps1 -Quiet"
+echo "    powershell -ExecutionPolicy Bypass -File install.ps1 -Quiet"
+echo "    . \$PROFILE"
+echo ""

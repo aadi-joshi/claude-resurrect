@@ -23,7 +23,13 @@ every completed step, exact resume point -- before sending the SIGHUP signal.
 - You need a quick reload to test a hook or config change and no important
   task state needs to be preserved
 
-**After resurrection:**
-When you wake up and see a Resurrection Manifest as your first message, read it
-completely before doing anything else. Confirm the resume point, check the
-immediate action, then proceed without asking the user to re-explain the task.
+**After resurrection (bash wrapper -- macOS/Linux/WSL/Git Bash):**
+When your first message IS a Resurrection Manifest (starts with
+`# Resurrection Manifest`), read it completely, confirm the resume point, and
+immediately take the Immediate Action step without asking for confirmation.
+
+**After resurrection (PowerShell wrapper -- Windows Terminal):**
+When your first message starts with `Resurrection:`, do exactly what it says:
+read `.claude/resurrection.md` with the Read tool, delete it with the Bash tool
+(`rm -f .claude/resurrection.md`), then execute the Immediate Action in the
+manifest without asking for confirmation.

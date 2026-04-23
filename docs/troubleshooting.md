@@ -1,19 +1,31 @@
 # Troubleshooting
 
-## cr() not found after install
+## claude() wrapper not active after install
 
-You need to reload your shell:
+**bash/zsh:**
 ```bash
 source ~/.zshrc   # or ~/.bashrc
 ```
 
-Or open a new terminal.
+**PowerShell:**
+```powershell
+. $PROFILE
+```
+
+Or open a new terminal window.
 
 ---
 
-## Claude exits with 129 but doesn't resume correctly
+## Claude exits but doesn't resume correctly
 
-**Check 1:** Is `cr` being used instead of `claude`? The loop only works if you launched via `cr`.
+**Check 1:** Is the wrapper active? Verify with:
+```bash
+echo $CLAUDE_RESURRECT_WRAPPER   # bash -- should print 1
+```
+```powershell
+$env:CLAUDE_RESURRECT_WRAPPER    # PowerShell -- should print 1
+```
+If it's empty, the wrapper function isn't wrapping the session. Reload your profile and relaunch `claude`.
 
 **Check 2:** Does `.claude/resurrection.md` exist after the exit?
 ```bash
@@ -93,17 +105,27 @@ The `cr()` wrapper can be updated to catch exit code 129 on macOS as well — it
 
 ---
 
-## WSL2 / Windows shells
+## Windows PowerShell (native Windows Terminal)
 
-The automatic restart works on Windows shells (WSL2/Git Bash/MSYS) but through a different mechanism than macOS/Linux.
+Install with `install.ps1` (see README). The PowerShell wrapper works differently from the bash wrapper: it keeps the manifest file on disk and injects a short trigger message on restart. When Claude receives `Resurrection: read .claude/resurrection.md...`, it reads the file and continues.
+
+If Claude wakes up but ignores the manifest:
+- Check that `~/.claude/CLAUDE.md` includes the resurrection protocol block (run `install.ps1` again if missing)
+- Check that `.claude/resurrection.md` was not deleted before Claude had a chance to read it
+
+---
+
+## WSL2 / Git Bash / MSYS
+
+The automatic restart works on Windows bash shells but through a different mechanism than macOS/Linux.
 
 In WSL, `$PPID` resolves to 1 (WSL init), not the Claude Code Windows process. `kill -HUP 1` fails silently.
 
-The wrapper handles this automatically:
-1. On startup, it detects a Windows shell by requiring `powershell.exe` and checking runtime signals (`WSL_DISTRO_NAME`, `WSL_INTEROP`, `$PPID -eq 1`, or Windows-like `uname` values such as `MINGW`/`MSYS`)
+The bash wrapper handles this automatically:
+1. On startup, it detects a Windows shell by requiring `powershell.exe` and checking environment signals (`WSL_DISTRO_NAME`, `WSL_INTEROP`, `$PPID -eq 1`, or `uname` values containing `mingw`/`msys`)
 2. It starts a background shell (`_claude_resurrect_watcher`) that polls for `.claude/resurrect.flag` every 0.3s
 3. The skill writes that flag before attempting `kill -HUP $PPID`
-4. When the watcher sees the flag, it runs PowerShell to find and stop the node.exe running Claude
+4. When the watcher sees the flag, it runs PowerShell to find and stop `claude.exe` (or `node.exe` for npm-only installs)
 
 If the watcher is not triggering, check that `powershell.exe` is accessible from your shell:
 ```bash

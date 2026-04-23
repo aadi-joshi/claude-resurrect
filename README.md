@@ -4,7 +4,7 @@
 
 <img width="209" height="195" alt="ezgif com-animated-gif-maker (1)" src="https://github.com/user-attachments/assets/0783012b-ce83-4804-af9d-48c0ca4819c2" />
 
-**Platform support:** macOS, Linux, WSL2, Git Bash/MSYS, and **native Windows PowerShell** (Windows Terminal). The automatic restart uses SIGHUP on Unix and a background process watcher on Windows.
+**Platform support:** macOS, Linux, WSL2, Git Bash/MSYS, and **native Windows PowerShell** (Windows Terminal). Automatic restart uses SIGHUP on Unix and a background process watcher on Windows.
 
 ---
 
@@ -36,15 +36,13 @@ You: claude --dangerously-skip-permissions
                 |
                 +-- macOS/Linux: Claude Code exits 129 (SIGHUP)
                 +-- Windows shells: background watcher sees the flag,
-                     kills node.exe via PowerShell, Claude Code exits
+                     kills claude.exe via PowerShell, Claude Code exits
                 |
                 v
-           Claude Code exits
-                |
-                v
-           cr() wrapper catches it
-           reads the manifest, deletes it
-           runs: claude --resume <session-id> "<manifest content>"
+           wrapper catches it
+           reads manifest, stores content, deletes the file
+           sets CLAUDE_RESURRECT_MANIFEST env var (Windows)
+           runs: claude --resume <session-id> [manifest or trigger]
                 |
                 v
            Claude wakes up. First message IS the manifest.
@@ -53,6 +51,46 @@ You: claude --dangerously-skip-permissions
 ```
 
 The manifest is single-use. Deleted after the wrapper reads it. If you resurrect five times in a session, you get five clean handoffs.
+
+---
+
+## Quick tutorial
+
+Install it (see below), then open a terminal:
+
+```bash
+claude --dangerously-skip-permissions
+# PowerShell: claude-yolo
+```
+
+Give Claude a real multi-step task:
+
+> "I'm building a GitHub PR labeler. Steps 1-2 are done (created src/ and tsconfig.json). Step 3 is to install the GitHub MCP server. Do it now, then continue."
+
+Claude installs the server, notices it needs to restart to load it, and invokes `/resurrect` on its own. It writes a manifest:
+
+```
+## Completed Steps
+- [x] Installed GitHub MCP server
+- [x] Added entry to ~/.claude.json
+
+## Exact Resume Point
+MCP install complete. Need restart for server to load. src/auto-label.ts not yet written.
+
+## Immediate Action After Restart
+Run /mcp to confirm github-mcp is connected. If yes: write src/auto-label.ts.
+```
+
+Then it kills itself. The wrapper catches the exit, reads the manifest, relaunches. Claude wakes up, reads the resume point, runs `/mcp`, and continues writing `src/auto-label.ts`. You never touch the keyboard. The restart is about 2 seconds.
+
+To trigger it manually inside any session:
+
+| Command | What it does |
+|---|---|
+| `/resurrect` | Write the manifest, then restart. Use for any real task. |
+| `/resurrect-now` | Instant hard restart, no manifest. Quick config reload. |
+
+Use `--dangerously-skip-permissions` (or `claude-yolo`) so Claude never pauses mid-cycle. With that flag, the whole thing -- manifest write, kill, resume, immediate action -- runs without prompts.
 
 ---
 
@@ -70,7 +108,7 @@ source ~/.zshrc  # or ~/.bashrc
 The installer:
 - Copies `/resurrect` and `/resurrect-now` to `~/.claude/skills/`
 - Copies the pre-compact hook to `~/.claude/hooks/` and registers it in `~/.claude/settings.json`
-- Adds a `claude()` shell function to your rc that wraps the real binary transparently
+- Adds a `claude()` shell function to your rc file that wraps the real binary transparently
 - Patches `~/.claude/CLAUDE.md` with the resurrection protocol so Claude knows when to trigger restarts automatically
 
 ```bash
@@ -88,7 +126,7 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 . $PROFILE
 ```
 
-The PowerShell installer does the same thing as the bash installer -- skills, hook, wrapper, CLAUDE.md -- but adds a `claude()` function to your `$PROFILE` instead of `.bashrc`.
+Same as the bash installer -- skills, hook, wrapper, CLAUDE.md -- but adds a `claude()` function to `$PROFILE` instead of `.bashrc`.
 
 ```powershell
 .\install.ps1 -NoHooks   # skip the pre-compact hook
@@ -99,24 +137,17 @@ The PowerShell installer does the same thing as the bash installer -- skills, ho
 
 ## Usage
 
-After install, use `claude` exactly as you always have. Nothing changes on the outside:
+After install, use `claude` as you normally would:
 
 ```bash
 claude                                # normal launch, resurrection-enabled
-claude --dangerously-skip-permissions # any flags pass through unchanged
+claude --dangerously-skip-permissions # flags pass through unchanged
 claude --model claude-opus-4-7
 ```
 
-The wrapper is a shell function that shadows the real binary. It calls `command claude` internally (which bypasses shell functions and hits the real binary directly), so there's no recursion and no conflict with your existing setup.
+The wrapper shadows the real binary. It calls `command claude` internally, which bypasses shell functions and hits the actual binary -- no recursion, no conflict with your existing aliases.
 
-**Claude handles restarts automatically.** The installer patches `~/.claude/CLAUDE.md` with instructions telling Claude when to invoke `/resurrect` -- installing an MCP server, editing settings, modifying hooks, running `claude update`. Claude detects these situations and restarts itself without asking you. You just see the session resume.
-
-You can also trigger manually from inside a session:
-
-| Command | What it does |
-|---|---|
-| `/resurrect` | Write the manifest, then restart. Use for any real task. |
-| `/resurrect-now` | Instant hard restart, no manifest. Quick config reload. |
+**Claude handles restarts automatically.** The installer patches `~/.claude/CLAUDE.md` with instructions telling Claude when to use `/resurrect` -- installing an MCP server, editing settings, modifying hooks, running `claude update`. Claude detects these situations and handles the restart on its own. From your side, the session just resumes.
 
 ---
 
@@ -159,9 +190,20 @@ Full example in `examples/resurrection.md`.
 
 ## Flags and permissions
 
-Everything passes through. If you launch with `--dangerously-skip-permissions`, the resumed session gets the same flag. Any startup flag you use with `cr` is preserved across restarts.
+Everything passes through. `--dangerously-skip-permissions` is recommended for autonomous sessions and carries over to every restart. The `claude-yolo` alias (installed by the wrapper) makes it convenient:
 
-Session-scoped permissions (things you clicked "always allow" during a session) are not inherited on resume -- that's a Claude Code behavior, not something the wrapper can change. The manifest's "Immediate Action" section is where Claude can note anything permission-sensitive so it can re-request cleanly.
+```bash
+claude-yolo
+claude-yolo --model claude-opus-4-7
+```
+
+```powershell
+claude-yolo   # PowerShell
+```
+
+On restart, the wrapper deletes the manifest before launching Claude. Claude reads the content from an environment variable (`CLAUDE_RESURRECT_MANIFEST`), so it never touches any sensitive files. No prompts during a resurrection cycle.
+
+Session-scoped permissions (the "always allow" clicks from the previous session) don't carry over on resume -- that's Claude Code behavior, not something the wrapper can change. The manifest's "Immediate Action" section is where Claude can flag anything that needs re-approval.
 
 ---
 
@@ -173,19 +215,19 @@ Long sessions compact automatically. The `pre-compact.mjs` hook fires just befor
 - Last 10 commands run
 - The last few conversation turns
 
-This is not automatic resurrection -- it's a backup. If you restart manually after a compaction event, tell Claude: "Read `.claude/compaction-backup.md` and pick up where we left off."
+This isn't automatic resurrection -- it's a safety net. If you restart manually after a compaction event, tell Claude: "Read `.claude/compaction-backup.md` and pick up where we left off."
 
 ---
 
 ## Known limitations
 
-**Subagents:** If Claude spawns a subagent and the subagent's Bash tool sends `kill -HUP $PPID`, it signals the subagent's parent process, not the main Claude Code session. Only trigger `/resurrect` from the main agent.
+**Subagents:** If Claude spawns a subagent and the subagent's Bash tool sends `kill -HUP $PPID`, it signals the subagent's parent, not the main Claude Code session. Only trigger `/resurrect` from the main agent.
 
-**Windows (WSL2 / Git Bash / MSYS / PowerShell):** Works, but uses a different mechanism. In Windows environments, `kill -HUP $PPID` is unreliable. Both the bash and PowerShell wrappers start a background watcher that polls for `.claude/resurrect.flag`. The skill writes that flag before attempting the kill. When the watcher sees the file, it calls `Stop-Process` on `claude.exe` (or `node.exe` for npm-only installs), triggering the restart. Same result, ~0.3s extra latency.
+**Windows (WSL2 / Git Bash / MSYS / PowerShell):** Works, but differently. `kill -HUP $PPID` is unreliable in Windows environments. Both wrappers start a background watcher that polls for `.claude/resurrect.flag`. When the flag appears, it calls `Stop-Process` on `claude.exe` (or `node.exe` for npm-only installs). Same result, ~0.3s extra latency.
 
 **Docker:** Session files live in `~/.claude/`. If the home directory isn't mounted as a volume, `--resume` has nothing to resume. Mount it or bind-mount `.claude/`.
 
-**Session ID fallback:** If `$CLAUDE_SESSION_ID` is not available in Claude's bash environment, the manifest records "unknown" and the wrapper falls back to `claude -c`. This still works in most cases but is slightly less reliable than an explicit `--resume <id>`.
+**Session ID fallback:** If `$CLAUDE_SESSION_ID` isn't available in Claude's bash environment, the manifest records "unknown" and the wrapper falls back to `claude -c`. This works in most cases but is slightly less reliable than `--resume <id>`.
 
 ---
 

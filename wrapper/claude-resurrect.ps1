@@ -14,13 +14,15 @@
 #   The skill writes .claude/resurrect.flag before attempting kill -HUP.
 #   This watcher sees the flag and calls Stop-Process on the claude.exe
 #   (or node.exe) process. The wrapper then checks for the flag on return,
-#   finds .claude/resurrection.md, and restarts claude with a trigger message
-#   that tells Claude to read the manifest file and continue.
+#   reads .claude/resurrection.md into $env:CLAUDE_RESURRECT_MANIFEST,
+#   deletes the manifest, and restarts claude with a trigger message.
 #
-# Why file-reference instead of content injection:
-#   On Windows, multi-line strings are truncated at newlines when passed
-#   through cmd.exe shims. By keeping the manifest on disk and passing a
-#   short trigger message, we avoid all quoting/encoding issues.
+# Why env var instead of file or inline content:
+#   Keeping the manifest on disk requires Claude to delete it, which triggers
+#   a "sensitive file" permission prompt for ~/.claude/ even with
+#   --dangerously-skip-permissions. Passing full content as a CLI arg can
+#   be truncated on Windows. Env var avoids both problems: wrapper deletes
+#   the file, Claude reads the content from the inherited env var.
 
 # claude-resurrect
 
@@ -117,10 +119,12 @@ function global:claude {
             Write-Host ""
             Start-Sleep -Milliseconds 300
 
-            # Keep the manifest on disk -- inject a short trigger message that tells
-            # Claude to read and delete it. This avoids Windows newline truncation
-            # issues that occur when passing multi-line content as a CLI argument.
-            & $claudeBin @resumeArgs @userArgs "Resurrection: read .claude/resurrection.md with the Read tool, then run: rm -f .claude/resurrection.md -- then execute the Immediate Action in the manifest without asking for confirmation."
+            # Pass manifest via env var and delete the file here so Claude never
+            # needs to touch ~/.claude/ (avoids sensitive-file permission prompt).
+            $env:CLAUDE_RESURRECT_MANIFEST = $content
+            Remove-Item $manifest -ErrorAction SilentlyContinue
+            $trigger = "Resurrection: run Bash(printf '%s\n' `"`$CLAUDE_RESURRECT_MANIFEST`") to read your manifest, then execute the Immediate Action immediately without asking for confirmation."
+            & $claudeBin @resumeArgs @userArgs $trigger
         } else {
             Write-Host ""
             Write-Host "  claude-resurrect: restarting (no manifest)"

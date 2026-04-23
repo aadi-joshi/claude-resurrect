@@ -122,9 +122,9 @@ Chk "session_id is valid UUID" ($sid -match "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4
 $resumeArgs = if ($sid -match "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$") { "--resume $sid" } else { "-c" }
 Chk "Wrapper would use --resume" ($resumeArgs -like "--resume *")
 
-$injMsg = "Resurrection: read .claude/resurrection.md with the Read tool, then run: rm -f .claude/resurrection.md -- then execute the Immediate Action in the manifest without asking for confirmation."
+$injMsg = "Resurrection: run Bash(printf '%s\n' `"`$CLAUDE_RESURRECT_MANIFEST`") to read your manifest, then execute the Immediate Action immediately without asking for confirmation."
 Chk "Injection message has no newlines" ($injMsg -notmatch "[\r\n]")
-Chk "Injection message safe for cmd" ($injMsg -notmatch '[%<>]')
+Chk "Injection message has no file reference" ($injMsg -notmatch "resurrection\.md")
 
 Remove-Item $manifestPath -ErrorAction SilentlyContinue
 

@@ -72,11 +72,16 @@ claude() {
         sleep 0.3
 
         if [[ $is_windows -eq 1 ]]; then
-          # On Windows, keep the manifest on disk and inject a short trigger.
-          # Multi-line content passed through Windows arg parsing (CommandLineToArgvW)
-          # gets split at newlines; file-reference injection avoids this.
-          command claude "${resume_flags[@]}" "${user_flags[@]}" \
-            "Resurrection: read .claude/resurrection.md with the Read tool, then run: rm -f .claude/resurrection.md -- then execute the Immediate Action in the manifest without asking for confirmation."
+          # Pass manifest via env var and delete the file here so Claude never
+          # needs to touch ~/.claude/ (avoids sensitive-file permission prompt).
+          # CommandLineToArgvW truncates multi-line CLI args on Windows, so
+          # env var is also safer than inline content injection.
+          local manifest_content
+          manifest_content=$(cat "$manifest")
+          rm -f "$manifest"
+          export CLAUDE_RESURRECT_MANIFEST="$manifest_content"
+          local trigger="Resurrection: run Bash(printf '%s\\n' \"\$CLAUDE_RESURRECT_MANIFEST\") to read your manifest, then execute the Immediate Action immediately without asking for confirmation."
+          command claude "${resume_flags[@]}" "${user_flags[@]}" "$trigger"
         else
           local manifest_content
           manifest_content=$(cat "$manifest")

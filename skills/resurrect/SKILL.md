@@ -84,8 +84,9 @@ This does two things:
 - Sends SIGHUP to Claude Code -- on macOS/Linux, the process exits with code 129
 
 The `claude` wrapper catches either signal (exit 129 or the flag file), reads
-the manifest, deletes it, and restarts Claude with the manifest as the first
-message -- so you wake up knowing exactly where you were.
+the manifest into memory, deletes the file, and restarts Claude with the
+manifest content injected as the first message -- so you wake up knowing
+exactly where you were.
 
 ---
 
